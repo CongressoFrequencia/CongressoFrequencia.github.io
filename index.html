@@ -375,11 +375,53 @@
     *{ transition:none !important; animation:none !important; }
   }
 </style>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  where,
+  doc,
+  deleteDoc,
+  onSnapshot,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDNCpggoZlZcok_j1ABgixMp4XluNnpYyA",
+  authDomain: "congresso-frequencia-inscricao.firebaseapp.com",
+  projectId: "congresso-frequencia-inscricao",
+  storageBucket: "congresso-frequencia-inscricao.firebasestorage.app",
+  messagingSenderId: "765307172170",
+  appId: "1:765307172170:web:a39792bb6f358cdf45bdb3",
+  measurementId: "G-840QM7F0GF"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+window.db = db;
+
+window.firestoreFunctions = {
+    collection,
+    addDoc,
+    getDocs,
+    query,
+    where,
+    doc,
+    deleteDoc,
+    onSnapshot,
+    serverTimestamp
+};
+</script>
 </head>
 <body>
 <div class="card" id="card"></div>
 
-<script>
+<script type="module">
 (function(){
   var TEAMS = {
     Azul:       { label: "Azul",        freq: "88.3",  color: "#4C7C8A" },
@@ -419,26 +461,48 @@
   }
   function digitsOnly(str){ return (str || '').replace(/\D/g,''); }
 
-  async function getShared(key){
-    try{
-      var r = await window.storage.get(key, true);
-      return r ? r.value : null;
-    }catch(e){ return null; }
-  }
-  async function setShared(key, value){
-    try{ return await window.storage.set(key, value, true); }catch(e){ return null; }
-  }
-  async function deleteShared(key){
-    try{ return await window.storage.delete(key, true); }catch(e){ return null; }
-  }
+  const db = window.db;
+
+  const {
+      collection,
+      addDoc,
+      getDocs,
+      query,
+      where,
+      doc,
+      deleteDoc,
+      onSnapshot,
+      serverTimestamp
+  } = window.firestoreFunctions;
 
   async function getCounts(){
-    var raw = await getShared('gincana-counts');
-    if (raw){ try{ return JSON.parse(raw); }catch(e){} }
-    var init = {}; TEAM_KEYS.forEach(function(k){ init[k]=0; });
-    await setShared('gincana-counts', JSON.stringify(init));
-    return init;
+
+      const counts = {};
+
+      TEAM_KEYS.forEach(function(team){
+          counts[team]=0;
+      });
+
+      const snapshot = await getDocs(
+          collection(db,"inscritos")
+      );
+
+      snapshot.forEach(function(documento){
+
+          const dados = documento.data();
+
+          if(dados.team && counts[dados.team] !== undefined){
+
+              counts[dados.team]++;
+
+          }
+
+      });
+
+      return counts;
+
   }
+
 
   function pickTeam(counts){
     var min = Math.min.apply(null, TEAM_KEYS.map(function(k){ return counts[k] || 0; }));
@@ -544,46 +608,102 @@
   }
 
   async function handleSubmit(){
-    var name = document.getElementById('fname').value.trim();
-    var whats = document.getElementById('fwhats').value.trim();
-    var digits = digitsOnly(whats);
 
-    if (name.length < 3){ renderForm('Digite seu nome completo.'); return; }
-    if (digits.length < 8){ renderForm('Digite um WhatsApp válido, com DDD.'); return; }
+      var name = document.getElementById('fname').value.trim();
+      var whats = document.getElementById('fwhats').value.trim();
+      var digits = digitsOnly(whats);
 
-    var btn = document.getElementById('submitBtn');
-    btn.disabled = true;
-    btn.textContent = 'Sintonizando...';
-
-    var slug = slugify(name) + '-' + digits;
-    var personKey = 'gincana-person-' + slug;
-
-    try{
-      var existingRaw = await getShared(personKey);
-      if (existingRaw){
-        var existing = JSON.parse(existingRaw);
-        renderTuning(existing.team, true);
-        return;
+      if(name.length < 3){
+          renderForm("Digite seu nome completo.");
+          return;
       }
 
-      var counts = await getCounts();
-      var team = pickTeam(counts);
-      counts[team] = (counts[team] || 0) + 1;
-      await setShared('gincana-counts', JSON.stringify(counts));
+      if(digits.length < 8){
+          renderForm("Digite um WhatsApp válido.");
+          return;
+      }
 
-      var record = { name: name, whatsapp: digits, team: team, ts: Date.now() };
-      await setShared(personKey, JSON.stringify(record));
+      var btn = document.getElementById("submitBtn");
 
-      var indexRaw = await getShared('gincana-index');
-      var index = [];
-      try{ index = indexRaw ? JSON.parse(indexRaw) : []; }catch(e){ index = []; }
-      if (index.indexOf(personKey) === -1) index.push(personKey);
-      await setShared('gincana-index', JSON.stringify(index));
+      btn.disabled = true;
+      btn.textContent = "Sintonizando...";
 
-      renderTuning(team, false);
-    }catch(e){
-      renderForm('Algo saiu do ar. Tenta de novo.');
-    }
+      try{
+
+          // ===============================
+          // VERIFICA SE JÁ EXISTE INSCRIÇÃO
+          // ===============================
+
+          const inscritosRef = collection(db,"inscritos");
+
+          const busca = query(
+              inscritosRef,
+              where("whatsapp","==",digits)
+          );
+
+          const resultado = await getDocs(busca);
+
+          if(!resultado.empty){
+
+              const pessoa = resultado.docs[0].data();
+
+              renderTuning(
+                  pessoa.team,
+                  true
+              );
+
+              return;
+
+          }
+
+          // ===============================
+          // DEFINE A EQUIPE
+          // ===============================
+
+          const counts = await getCounts();
+
+          const team = pickTeam(counts);
+
+          // ===============================
+          // SALVA NO FIRESTORE
+          // ===============================
+
+          await addDoc(
+
+              inscritosRef,
+
+              {
+
+                  name:name,
+
+                  whatsapp:digits,
+
+                  team:team,
+
+                  ts:Date.now(),
+
+                  createdAt:serverTimestamp()
+
+              }
+
+          );
+
+          renderTuning(
+              team,
+              false
+          );
+
+      }
+      catch(e){
+
+          console.error(e);
+
+          renderForm(
+              "Erro ao conectar ao servidor."
+          );
+
+      }
+
   }
 
   // ---------- TUNING / RESULT VIEW ----------
@@ -683,16 +803,11 @@
   var listVisible = false;
 
   async function loadPeople(){
-    var indexRaw = await getShared('gincana-index');
-    var index = [];
-    try{ index = indexRaw ? JSON.parse(indexRaw) : []; }catch(e){ index = []; }
+    var snapshot = await getDocs(collection(db, "inscritos"));
     var people = [];
-    for (var i = 0; i < index.length; i++){
-      var raw = await getShared(index[i]);
-      if (raw){
-        try{ people.push(JSON.parse(raw)); }catch(e){}
-      }
-    }
+    snapshot.forEach(function(documento){
+      people.push(documento.data());
+    });
     people.sort(function(a,b){ return (a.ts||0) - (b.ts||0); });
     return people;
   }
@@ -805,15 +920,18 @@
     var btn = document.getElementById('resetBtn');
     btn.textContent = 'Resetando...';
     try{
-      var indexRaw = await getShared('gincana-index');
-      var index = indexRaw ? JSON.parse(indexRaw) : [];
-      for (var i = 0; i < index.length; i++){ await deleteShared(index[i]); }
-      await deleteShared('gincana-index');
-      var init = {}; TEAM_KEYS.forEach(function(k){ init[k]=0; });
-      await setShared('gincana-counts', JSON.stringify(init));
-    }catch(e){}
+      var snapshot = await getDocs(collection(db, "inscritos"));
+      var promises = [];
+      snapshot.forEach(function(documento){
+        promises.push(deleteDoc(doc(db, "inscritos", documento.id)));
+      });
+      await Promise.all(promises);
+    }catch(e){
+      console.error(e);
+    }
     btn.textContent = 'Resetar tudo';
     refreshCounts();
+    if (listVisible) loadAndRenderPeople();
   }
 
   // ---------- boot ----------
