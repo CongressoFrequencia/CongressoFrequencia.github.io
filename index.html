@@ -412,6 +412,7 @@ const auth = getAuth(app);
   
 window.db = db;
 window.auth = auth;
+
 window.firebaseAuth = {
     signInWithEmailAndPassword,
     onAuthStateChanged,
@@ -444,7 +445,7 @@ window.firestoreFunctions = {
   var TEAM_KEYS = Object.keys(TEAMS);
   // var ADMIN_PIN = '1378';
   var reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var isAdmin = new URLSearchParams(window.location.search).get('admin') === '1';
+  // var isAdmin = new URLSearchParams(window.location.search).get('admin') === '1';
   var card = document.getElementById('card');
 
   function squiggleSvg(color, w){
@@ -590,7 +591,9 @@ window.firestoreFunctions = {
       const email = document.getElementById("email").value.trim();
       const password = document.getElementById("password").value;
   
-      try{
+      try {
+  
+          console.log(window.firebaseAuth);
   
           await window.firebaseAuth.signInWithEmailAndPassword(
               window.auth,
@@ -598,14 +601,14 @@ window.firestoreFunctions = {
               password
           );
   
-          renderAdmin();
+          // O onAuthStateChanged vai chamar renderAdmin()
+          // automaticamente.
   
-      }catch(e){
-            console.log(window.auth);
-            console.log(email);
-            console.log(password);
-            console.error("ERRO:", e);
-            alert(JSON.stringify(e));
+      } catch (e) {
+  
+          console.error(e);
+          alert(e.code + "\n\n" + e.message);
+  
       }
   
   }
@@ -973,8 +976,15 @@ window.firestoreFunctions = {
   }
 
   // ---------- boot ----------
-  if (isAdmin){ renderAdmin(); } else { renderForm(); }
-})();
+  window.firebaseAuth.onAuthStateChanged(window.auth, (user) => {
+
+    if (user) {
+        renderAdmin();
+    } else {
+        renderForm();
+    }
+
+});
 </script>
 </body>
 </html>
