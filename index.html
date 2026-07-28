@@ -800,7 +800,7 @@ window.authFunctions = {
       '<div id="peopleListWrap"></div>' +
       '<div class="admin-actions">' +
         '<button id="refreshBtn">Atualizar</button>' +
-        '<button class="danger" id="resetBtn">Resetar tudo</button>' +
+        // '<button class="danger" id="resetBtn">Resetar tudo</button>' +
       '</div>' +
       '<p class="hint">Contagens podem variar em 1 no caso raro de dois escaneamentos simultâneos.</p>' +
       '<p class="hint" style="margin-top:10px;"><a href="#" id="logoutLink" style="color:inherit; text-decoration:underline;">sair</a></p>';
@@ -817,7 +817,7 @@ window.authFunctions = {
       refreshCounts();
       if (listVisible) loadAndRenderPeople();
     });
-    document.getElementById('resetBtn').addEventListener('click', confirmReset);
+    // document.getElementById('resetBtn').addEventListener('click', confirmReset);
     document.getElementById('listToggleBtn').addEventListener('click', toggleList);
     document.getElementById('csvBtn').addEventListener('click', downloadCsv);
     document.getElementById('logoutLink').addEventListener('click', function(e){
