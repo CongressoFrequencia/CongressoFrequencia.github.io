@@ -412,6 +412,11 @@ const auth = getAuth(app);
   
 window.db = db;
 window.auth = auth;
+window.firebaseAuth = {
+    signInWithEmailAndPassword,
+    onAuthStateChanged,
+    signOut
+};
   
 window.firestoreFunctions = {
     collection,
@@ -587,7 +592,7 @@ window.firestoreFunctions = {
   
       try{
   
-          await signInWithEmailAndPassword(
+          await window.firebaseAuth.signInWithEmailAndPassword(
               window.auth,
               email,
               password
