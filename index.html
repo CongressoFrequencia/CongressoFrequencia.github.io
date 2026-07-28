@@ -596,6 +596,9 @@ window.firestoreFunctions = {
           renderAdmin();
   
       }catch(e){
+            console.log(window.auth);
+            console.log(email);
+            console.log(password);
             console.error("ERRO:", e);
             alert(JSON.stringify(e));
       }
