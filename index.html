@@ -376,12 +376,6 @@
   }
 </style>
 <script type="module">
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-  onAuthStateChanged,
-  signOut
-} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
 import {
   getFirestore,
@@ -395,6 +389,12 @@ import {
   onSnapshot,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDNCpggoZlZcok_j1ABgixMp4XluNnpYyA",
@@ -596,13 +596,8 @@ window.firestoreFunctions = {
           renderAdmin();
   
       }catch(e){
-  
-              console.log(e);
-              console.log(e.code);
-              console.log(e.message);
-
-              alert(e.code);
-  
+            console.error("ERRO:", e);
+            alert(JSON.stringify(e));
       }
   
   }
