@@ -977,12 +977,12 @@ window.firestoreFunctions = {
 
   // ---------- boot ----------
   window.firebaseAuth.onAuthStateChanged(window.auth, (user) => {
-
-    if (user) {
-        renderAdmin();
-    } else {
-        renderForm();
-    }
+  
+      if (user) {
+          renderAdmin();
+      } else {
+          renderForm();
+      }
 
 });
 </script>
