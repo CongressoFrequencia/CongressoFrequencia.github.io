@@ -800,7 +800,6 @@ window.authFunctions = {
       '<div id="peopleListWrap"></div>' +
       '<div class="admin-actions">' +
         '<button id="refreshBtn">Atualizar</button>' +
-        // '<button class="danger" id="resetBtn">Resetar tudo</button>' +
       '</div>' +
       '<p class="hint">Contagens podem variar em 1 no caso raro de dois escaneamentos simultâneos.</p>' +
       '<p class="hint" style="margin-top:10px;"><a href="#" id="logoutLink" style="color:inherit; text-decoration:underline;">sair</a></p>';
@@ -817,7 +816,6 @@ window.authFunctions = {
       refreshCounts();
       if (listVisible) loadAndRenderPeople();
     });
-    // document.getElementById('resetBtn').addEventListener('click', confirmReset);
     document.getElementById('listToggleBtn').addEventListener('click', toggleList);
     document.getElementById('csvBtn').addEventListener('click', downloadCsv);
     document.getElementById('logoutLink').addEventListener('click', function(e){
@@ -927,37 +925,6 @@ window.authFunctions = {
       '</div>';
     }).join('');
     document.getElementById('bars').innerHTML = barsHtml;
-  }
-
-  var resetArmed = false;
-  function confirmReset(){
-    var btn = document.getElementById('resetBtn');
-    if (!resetArmed){
-      resetArmed = true;
-      btn.textContent = 'Confirmar reset';
-      setTimeout(function(){ resetArmed = false; btn.textContent = 'Resetar tudo'; }, 4000);
-      return;
-    }
-    resetArmed = false;
-    doReset();
-  }
-
-  async function doReset(){
-    var btn = document.getElementById('resetBtn');
-    btn.textContent = 'Resetando...';
-    try{
-      var snapshot = await getDocs(collection(db, "inscritos"));
-      var promises = [];
-      snapshot.forEach(function(documento){
-        promises.push(deleteDoc(doc(db, "inscritos", documento.id)));
-      });
-      await Promise.all(promises);
-    }catch(e){
-      console.error(e);
-    }
-    btn.textContent = 'Resetar tudo';
-    refreshCounts();
-    if (listVisible) loadAndRenderPeople();
   }
 
   // ---------- boot ----------
