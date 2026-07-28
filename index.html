@@ -376,6 +376,12 @@
   }
 </style>
 <script type="module">
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
 import {
   getFirestore,
@@ -402,9 +408,11 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-
+const auth = getAuth(app);
+  
 window.db = db;
-
+window.auth = auth;
+  
 window.firestoreFunctions = {
     collection,
     addDoc,
@@ -429,7 +437,7 @@ window.firestoreFunctions = {
     Vermelha: { label: "Vermelha",  freq: "3.2", color: "#8A4A42" }
   };
   var TEAM_KEYS = Object.keys(TEAMS);
-  var ADMIN_PIN = '1378';
+  // var ADMIN_PIN = '1378';
   var reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var isAdmin = new URLSearchParams(window.location.search).get('admin') === '1';
   var card = document.getElementById('card');
@@ -538,39 +546,96 @@ window.firestoreFunctions = {
   }
 
   // ---------- FORM VIEW ----------
-  function renderPinPrompt(){
+  // function renderPinPrompt(){
+  //   card.innerHTML =
+  //     dividerHtml() +
+  //     '<p class="eyebrow">Acesso do organizador</p>' +
+  //     '<p class="sub" style="margin-top:14px;">Digite o código de acesso para ver as inscrições.</p>' +
+  //     '<div style="height:18px"></div>' +
+  //     '<div class="field">' +
+  //       '<label for="pinInput">Código</label>' +
+  //       '<input id="pinInput" type="password" inputmode="numeric" placeholder="••••">' +
+  //     '</div>' +
+  //     '<button class="submit-btn" id="pinBtn">Entrar</button>' +
+  //     '<button class="again-btn" id="pinBackBtn" style="margin-top:10px;">Voltar</button>';
+
+  //   document.getElementById('pinBtn').addEventListener('click', checkPin);
+  //   document.getElementById('pinInput').addEventListener('keydown', function(e){
+  //     if (e.key === 'Enter') checkPin();
+  //   });
+  //   document.getElementById('pinBackBtn').addEventListener('click', function(){ renderForm(); });
+  //   document.getElementById('pinInput').focus();
+  // }
+// ---------- LOGIN ----------
+function renderLogin() {
+
     card.innerHTML =
       dividerHtml() +
       '<p class="eyebrow">Acesso do organizador</p>' +
-      '<p class="sub" style="margin-top:14px;">Digite o código de acesso para ver as inscrições.</p>' +
       '<div style="height:18px"></div>' +
+
       '<div class="field">' +
-        '<label for="pinInput">Código</label>' +
-        '<input id="pinInput" type="password" inputmode="numeric" placeholder="••••">' +
+      '<label>E-mail</label>' +
+      '<input id="email" type="email">' +
       '</div>' +
-      '<button class="submit-btn" id="pinBtn">Entrar</button>' +
-      '<button class="again-btn" id="pinBackBtn" style="margin-top:10px;">Voltar</button>';
 
-    document.getElementById('pinBtn').addEventListener('click', checkPin);
-    document.getElementById('pinInput').addEventListener('keydown', function(e){
-      if (e.key === 'Enter') checkPin();
+      '<div class="field">' +
+      '<label>Senha</label>' +
+      '<input id="password" type="password">' +
+      '</div>' +
+
+      '<button class="submit-btn" id="loginBtn">Entrar</button>' +
+
+      '<button class="again-btn" id="backBtn" style="margin-top:10px;">Voltar</button>';
+
+    document.getElementById("loginBtn").addEventListener("click", login);
+
+    document.getElementById("password").addEventListener("keydown", function(e){
+        if(e.key === "Enter"){
+            login();
+        }
     });
-    document.getElementById('pinBackBtn').addEventListener('click', function(){ renderForm(); });
-    document.getElementById('pinInput').focus();
-  }
 
-  function checkPin(){
-    var val = document.getElementById('pinInput').value.trim();
-    if (val === ADMIN_PIN){
-      renderAdmin();
-    } else {
-      renderPinPrompt();
-      var err = document.createElement('p');
-      err.className = 'error-msg';
-      err.textContent = 'Código incorreto.';
-      document.querySelector('.sub').insertAdjacentElement('afterend', err);
+    document.getElementById("backBtn").addEventListener("click", function(){
+        renderForm();
+    });
+}
+
+async function login() {
+
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+
+    try{
+
+        await signInWithEmailAndPassword(
+            window.auth,
+            email,
+            password
+        );
+
+        renderAdmin();
+
+    }catch(e){
+
+        alert("Usuário ou senha inválidos.");
+
     }
-  }
+
+}
+
+  // function checkPin(){
+  //   var val = document.getElementById('pinInput').value.trim();
+  //   if (val === ADMIN_PIN){
+  //     renderAdmin();
+  //   } else {
+  //     renderPinPrompt();
+  //     var err = document.createElement('p');
+  //     err.className = 'error-msg';
+  //     err.textContent = 'Código incorreto.';
+  //     document.querySelector('.sub').insertAdjacentElement('afterend', err);
+  //   }
+  // }
 
   function renderForm(errorMsg){
     card.innerHTML =
@@ -595,7 +660,7 @@ window.firestoreFunctions = {
 
     document.getElementById('adminLink').addEventListener('click', function(e){
       e.preventDefault();
-      renderPinPrompt();
+      renderLogin();
     });
 
     document.getElementById('submitBtn').addEventListener('click', handleSubmit);
