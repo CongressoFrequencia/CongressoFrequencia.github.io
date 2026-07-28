@@ -597,7 +597,11 @@ window.firestoreFunctions = {
   
       }catch(e){
   
-          alert("Usuário ou senha inválidos.");
+              console.log(e);
+              console.log(e.code);
+              console.log(e.message);
+
+              alert(e.code);
   
       }
   
