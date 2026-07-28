@@ -391,8 +391,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 import {
   getAuth,
-  signInWithEmailAndPassword,
   onAuthStateChanged,
+  signInWithEmailAndPassword,
   signOut
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 
@@ -409,16 +409,10 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-  
+
 window.db = db;
 window.auth = auth;
 
-window.firebaseAuth = {
-    signInWithEmailAndPassword,
-    onAuthStateChanged,
-    signOut
-};
-  
 window.firestoreFunctions = {
     collection,
     addDoc,
@@ -429,6 +423,12 @@ window.firestoreFunctions = {
     deleteDoc,
     onSnapshot,
     serverTimestamp
+};
+
+window.authFunctions = {
+    onAuthStateChanged,
+    signInWithEmailAndPassword,
+    signOut
 };
 </script>
 </head>
@@ -443,9 +443,8 @@ window.firestoreFunctions = {
     Vermelha: { label: "Vermelha",  freq: "3.2", color: "#8A4A42" }
   };
   var TEAM_KEYS = Object.keys(TEAMS);
-  // var ADMIN_PIN = '1378';
   var reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  // var isAdmin = new URLSearchParams(window.location.search).get('admin') === '1';
+  var isAdmin = new URLSearchParams(window.location.search).get('admin') === '1';
   var card = document.getElementById('card');
 
   function squiggleSvg(color, w){
@@ -475,6 +474,7 @@ window.firestoreFunctions = {
   function digitsOnly(str){ return (str || '').replace(/\D/g,''); }
 
   const db = window.db;
+  const auth = window.auth;
 
   const {
       collection,
@@ -487,6 +487,12 @@ window.firestoreFunctions = {
       onSnapshot,
       serverTimestamp
   } = window.firestoreFunctions;
+
+  const {
+      onAuthStateChanged,
+      signInWithEmailAndPassword,
+      signOut
+  } = window.authFunctions;
 
   async function getCounts(){
 
@@ -551,68 +557,47 @@ window.firestoreFunctions = {
     '</svg>';
   }
 
-// ---------- LOGIN ----------
-  function renderLogin() {
-  
-      card.innerHTML =
-        dividerHtml() +
-        '<p class="eyebrow">Acesso do organizador</p>' +
-        '<div style="height:18px"></div>' +
-  
-        '<div class="field">' +
-        '<label>E-mail</label>' +
-        '<input id="email" type="email">' +
-        '</div>' +
-  
-        '<div class="field">' +
-        '<label>Senha</label>' +
-        '<input id="password" type="password">' +
-        '</div>' +
-  
-        '<button class="submit-btn" id="loginBtn">Entrar</button>' +
-  
-        '<button class="again-btn" id="backBtn" style="margin-top:10px;">Voltar</button>';
-  
-      document.getElementById("loginBtn").addEventListener("click", login);
-  
-      document.getElementById("password").addEventListener("keydown", function(e){
-          if(e.key === "Enter"){
-              login();
-          }
-      });
-  
-      document.getElementById("backBtn").addEventListener("click", function(){
-          renderForm();
-      });
-  }
-  
-  async function login() {
-  
-      const email = document.getElementById("email").value.trim();
-      const password = document.getElementById("password").value;
-  
-      try {
-  
-          console.log(window.firebaseAuth);
-  
-          await window.firebaseAuth.signInWithEmailAndPassword(
-              window.auth,
-              email,
-              password
-          );
-  
-          // O onAuthStateChanged vai chamar renderAdmin()
-          // automaticamente.
-  
-      } catch (e) {
-  
-          console.error(e);
-          alert(e.code + "\n\n" + e.message);
-  
-      }
-  
+  // ---------- FORM VIEW ----------
+  function renderLoginPrompt(errorMsg){
+    card.innerHTML =
+      dividerHtml() +
+      '<p class="eyebrow">Acesso do organizador</p>' +
+      '<p class="sub" style="margin-top:14px;">Entre com o e-mail e senha do organizador.</p>' +
+      '<div style="height:18px"></div>' +
+      (errorMsg ? '<p class="error-msg">' + errorMsg + '</p>' : '') +
+      '<div class="field">' +
+        '<label for="loginEmail">E-mail</label>' +
+        '<input id="loginEmail" type="email" placeholder="organizador@email.com" autocomplete="username">' +
+      '</div>' +
+      '<div class="field">' +
+        '<label for="loginPass">Senha</label>' +
+        '<input id="loginPass" type="password" placeholder="••••••••" autocomplete="current-password">' +
+      '</div>' +
+      '<button class="submit-btn" id="loginBtn">Entrar</button>' +
+      '<button class="again-btn" id="loginBackBtn" style="margin-top:10px;">Voltar</button>';
+
+    document.getElementById('loginBtn').addEventListener('click', doLogin);
+    document.getElementById('loginPass').addEventListener('keydown', function(e){
+      if (e.key === 'Enter') doLogin();
+    });
+    document.getElementById('loginBackBtn').addEventListener('click', function(){ renderForm(); });
+    document.getElementById('loginEmail').focus();
   }
 
+  function doLogin(){
+    var btn = document.getElementById('loginBtn');
+    var email = document.getElementById('loginEmail').value.trim();
+    var pass = document.getElementById('loginPass').value;
+    btn.textContent = 'Entrando...';
+    btn.disabled = true;
+    signInWithEmailAndPassword(auth, email, pass)
+      .then(function(){
+        renderAdmin();
+      })
+      .catch(function(){
+        renderLoginPrompt('E-mail ou senha incorretos.');
+      });
+  }
 
   function renderForm(errorMsg){
     card.innerHTML =
@@ -637,7 +622,7 @@ window.firestoreFunctions = {
 
     document.getElementById('adminLink').addEventListener('click', function(e){
       e.preventDefault();
-      renderLogin();
+      renderLoginPrompt();
     });
 
     document.getElementById('submitBtn').addEventListener('click', handleSubmit);
@@ -818,7 +803,7 @@ window.firestoreFunctions = {
         '<button class="danger" id="resetBtn">Resetar tudo</button>' +
       '</div>' +
       '<p class="hint">Contagens podem variar em 1 no caso raro de dois escaneamentos simultâneos.</p>' +
-      '<p class="hint" style="margin-top:10px;"><a href="#" id="backToFormLink" style="color:inherit; text-decoration:underline;">voltar ao cadastro</a></p>';
+      '<p class="hint" style="margin-top:10px;"><a href="#" id="logoutLink" style="color:inherit; text-decoration:underline;">sair</a></p>';
 
     var qrUrl = window.location.origin + window.location.pathname;
     new QRCode(document.getElementById('qrBox'), {
@@ -835,9 +820,9 @@ window.firestoreFunctions = {
     document.getElementById('resetBtn').addEventListener('click', confirmReset);
     document.getElementById('listToggleBtn').addEventListener('click', toggleList);
     document.getElementById('csvBtn').addEventListener('click', downloadCsv);
-    document.getElementById('backToFormLink').addEventListener('click', function(e){
+    document.getElementById('logoutLink').addEventListener('click', function(e){
       e.preventDefault();
-      renderForm();
+      signOut(auth).then(function(){ renderForm(); });
     });
   }
 
@@ -976,14 +961,13 @@ window.firestoreFunctions = {
   }
 
   // ---------- boot ----------
-  window.firebaseAuth.onAuthStateChanged(window.auth, (user) => {
-  
-      if (user) {
-          renderAdmin();
-      } else {
-          renderForm();
-      }
-
+  if (isAdmin){
+    onAuthStateChanged(auth, function(user){
+      if (user){ renderAdmin(); } else { renderLoginPrompt(); }
+    });
+  } else {
+    renderForm();
+  }
 })();
 </script>
 </body>
