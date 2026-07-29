@@ -395,6 +395,10 @@ import {
   signInWithEmailAndPassword,
   signOut
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+import {
+  initializeAppCheck,
+  ReCaptchaV3Provider
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app-check.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDNCpggoZlZcok_j1ABgixMp4XluNnpYyA",
@@ -407,6 +411,15 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+
+// TROQUE pela sua chave de site do reCAPTCHA v3 (veja instruções abaixo da mensagem).
+const RECAPTCHA_V3_SITE_KEY = "6LcJqmotAAAAACTIgJw4G9BoWQVSx-OJAjni9U8I";
+
+initializeAppCheck(app, {
+  provider: new ReCaptchaV3Provider(RECAPTCHA_V3_SITE_KEY),
+  isTokenAutoRefreshEnabled: true
+});
+
 const db = getFirestore(app);
 const auth = getAuth(app);
 
@@ -870,9 +883,9 @@ window.authFunctions = {
       return '<div class="person-row">' +
         '<div class="person-main">' +
           '<div class="person-name">' + escapeHtml(p.name || '') + '</div>' +
-          '<div class="person-whats">' + formatWhats(p.whatsapp) + '</div>' +
+          '<div class="person-whats">' + escapeHtml(formatWhats(p.whatsapp)) + '</div>' +
         '</div>' +
-        '<div class="person-team" style="background:' + hexToRgba(t.color, 0.15) + '; color:' + t.color + ';">' + t.label + '</div>' +
+        '<div class="person-team" style="background:' + hexToRgba(t.color, 0.15) + '; color:' + t.color + ';">' + escapeHtml(t.label) + '</div>' +
       '</div>';
     }).join('');
     wrap.innerHTML = '<div class="people-list">' + rows + '</div>';
@@ -884,6 +897,12 @@ window.authFunctions = {
     return d.innerHTML;
   }
 
+  function csvSafe(val){
+    var s = String(val == null ? '' : val).replace(/;/g, ',');
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    return s;
+  }
+
   async function downloadCsv(){
     var btn = document.getElementById('csvBtn');
     var originalText = btn.textContent;
@@ -892,8 +911,7 @@ window.authFunctions = {
     var lines = ['Nome;WhatsApp;Equipe'];
     people.forEach(function(p){
       var t = TEAMS[p.team] || { label: p.team };
-      var name = (p.name || '').replace(/;/g, ',');
-      lines.push(name + ';' + (p.whatsapp || '') + ';' + t.label);
+      lines.push(csvSafe(p.name) + ';' + csvSafe(p.whatsapp) + ';' + csvSafe(t.label));
     });
     var csv = '\uFEFF' + lines.join('\r\n');
     var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
