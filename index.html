@@ -113,7 +113,8 @@
     color:var(--ink-soft);
     margin-bottom:7px;
   }
-  .field input{
+  .field input,
+  .field textarea{
     width:100%;
     background:var(--paper);
     border:1px solid var(--line);
@@ -122,9 +123,13 @@
     padding:13px 14px;
     border-radius:4px;
     transition:border-color .15s ease;
+    resize:vertical;
   }
-  .field input:focus{ border-color:var(--terracota); }
-  .field input::placeholder{ color:#A9A190; }
+  .field input:focus,
+  .field textarea:focus{ border-color:var(--terracota); }
+  .field input::placeholder,
+  .field textarea::placeholder{ color:#A9A190; }
+  .field textarea{ min-height:90px; line-height:1.5; font-family:var(--font-body); }
 
   .submit-btn{
     width:100%;
@@ -144,6 +149,21 @@
   .submit-btn:hover{ background:#B34A2E; }
   .submit-btn:active{ transform:scale(0.98); }
   .submit-btn:disabled{ opacity:0.55; cursor:default; }
+
+  .secondary-btn{
+    width:100%;
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--ink-soft);
+    border-radius:4px;
+    padding:12px;
+    font-family:var(--font-mono);
+    font-size:11.5px;
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    transition:color .15s ease, border-color .15s ease;
+  }
+  .secondary-btn:hover{ color:var(--ink); border-color:var(--ink-soft); }
 
   .error-msg{
     font-size:12.5px;
@@ -213,6 +233,46 @@
     text-align:center;
     text-transform:uppercase;
   }
+
+  /* suggestion view specific */
+  .found-card{
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:4px;
+    padding:16px 14px;
+    margin:14px 0 18px;
+  }
+  .found-label{
+    font-family:var(--font-mono);
+    font-size:10px;
+    font-weight:700;
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    margin-bottom:4px;
+  }
+  .found-value{
+    font-size:14px;
+    color:var(--ink);
+    line-height:1.4;
+  }
+  .found-team-badge{
+    display:inline-block;
+    margin-top:8px;
+    font-family:var(--font-mono);
+    font-size:10px;
+    font-weight:700;
+    letter-spacing:1px;
+    text-transform:uppercase;
+    padding:4px 10px;
+    border-radius:3px;
+  }
+  .nav-row{
+    display:flex;
+    gap:10px;
+    margin-top:10px;
+  }
+  .nav-row button{ flex:1; }
 
   /* admin */
   .admin-title{
@@ -460,6 +520,12 @@ window.authFunctions = {
   var isAdmin = new URLSearchParams(window.location.search).get('admin') === '1';
   var card = document.getElementById('card');
 
+  // estado transitório da sugestão
+  var suggestionState = {
+    foundPerson: null,
+    foundDocId: null
+  };
+
   function squiggleSvg(color, w){
     color = color || '#CB5A3B';
     w = w || 34;
@@ -486,6 +552,19 @@ window.authFunctions = {
   }
   function digitsOnly(str){ return (str || '').replace(/\D/g,''); }
 
+  function escapeHtml(str){
+    var d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  function formatWhats(digits){
+    if (!digits) return '';
+    if (digits.length === 11) return '(' + digits.slice(0,2) + ') ' + digits.slice(2,7) + '-' + digits.slice(7);
+    if (digits.length === 10) return '(' + digits.slice(0,2) + ') ' + digits.slice(2,6) + '-' + digits.slice(6);
+    return digits;
+  }
+
   const db = window.db;
   const auth = window.auth;
 
@@ -508,33 +587,17 @@ window.authFunctions = {
   } = window.authFunctions;
 
   async function getCounts(){
-
       const counts = {};
-
-      TEAM_KEYS.forEach(function(team){
-          counts[team]=0;
-      });
-
-      const snapshot = await getDocs(
-          collection(db,"inscritos")
-      );
-
+      TEAM_KEYS.forEach(function(team){ counts[team]=0; });
+      const snapshot = await getDocs(collection(db,"inscritos"));
       snapshot.forEach(function(documento){
-
           const dados = documento.data();
-
           if(dados.team && counts[dados.team] !== undefined){
-
               counts[dados.team]++;
-
           }
-
       });
-
       return counts;
-
   }
-
 
   function pickTeam(counts){
     var min = Math.min.apply(null, TEAM_KEYS.map(function(k){ return counts[k] || 0; }));
@@ -542,7 +605,7 @@ window.authFunctions = {
     return candidates[Math.floor(Math.random() * candidates.length)];
   }
 
-  // ---------- SVG dial (matches the poster's tuning dial) ----------
+  // ---------- SVG dial ----------
   function buildTicks(cx, cy, rOuter){
     var out = '';
     for (var deg = 0; deg < 360; deg += 6){
@@ -631,13 +694,19 @@ window.authFunctions = {
       '</div>' +
       '<button class="submit-btn" id="submitBtn">Confirmar inscrição</button>' +
       '<p class="hint">Seus dados só servem para te reconhecer caso escaneie de novo.</p>' +
+      '<div class="nav-row">' +
+        '<button class="secondary-btn" id="suggestionNavBtn">Sugerir nome do congresso</button>' +
+      '</div>' +
       '<p class="hint" style="margin-top:14px;"><a href="#" id="adminLink" style="color:inherit; text-decoration:underline;">acesso do organizador</a></p>';
 
     document.getElementById('adminLink').addEventListener('click', function(e){
       e.preventDefault();
       renderLoginPrompt();
     });
-
+    document.getElementById('suggestionNavBtn').addEventListener('click', function(e){
+      e.preventDefault();
+      renderSuggestionSearch();
+    });
     document.getElementById('submitBtn').addEventListener('click', handleSubmit);
     ['fname','fwhats'].forEach(function(id){
       document.getElementById(id).addEventListener('keydown', function(e){
@@ -647,7 +716,6 @@ window.authFunctions = {
   }
 
   async function handleSubmit(){
-
       var name = document.getElementById('fname').value.trim();
       var whats = document.getElementById('fwhats').value.trim();
       var digits = digitsOnly(whats);
@@ -656,93 +724,36 @@ window.authFunctions = {
           renderForm("Digite seu nome completo.");
           return;
       }
-
       if(digits.length < 8){
           renderForm("Digite um WhatsApp válido.");
           return;
       }
-
       var btn = document.getElementById("submitBtn");
-
       btn.disabled = true;
       btn.textContent = "Sintonizando...";
-
       try{
-
-          // ===============================
-          // VERIFICA SE JÁ EXISTE INSCRIÇÃO
-          // ===============================
-
           const inscritosRef = collection(db,"inscritos");
-
-          const busca = query(
-              inscritosRef,
-              where("whatsapp","==",digits)
-          );
-
+          const busca = query(inscritosRef, where("whatsapp","==",digits));
           const resultado = await getDocs(busca);
-
           if(!resultado.empty){
-
               const pessoa = resultado.docs[0].data();
-
-              renderTuning(
-                  pessoa.team,
-                  true
-              );
-
+              renderTuning(pessoa.team, true);
               return;
-
           }
-
-          // ===============================
-          // DEFINE A EQUIPE
-          // ===============================
-
           const counts = await getCounts();
-
           const team = pickTeam(counts);
-
-          // ===============================
-          // SALVA NO FIRESTORE
-          // ===============================
-
-          await addDoc(
-
-              inscritosRef,
-
-              {
-
-                  name:name,
-
-                  whatsapp:digits,
-
-                  team:team,
-
-                  ts:Date.now(),
-
-                  createdAt:serverTimestamp()
-
-              }
-
-          );
-
-          renderTuning(
-              team,
-              false
-          );
-
-      }
-      catch(e){
-
+          await addDoc(inscritosRef, {
+              name:name,
+              whatsapp:digits,
+              team:team,
+              ts:Date.now(),
+              createdAt:serverTimestamp()
+          });
+          renderTuning(team, false);
+      } catch(e){
           console.error(e);
-
-          renderForm(
-              "Erro ao conectar ao servidor."
-          );
-
+          renderForm("Erro ao conectar ao servidor.");
       }
-
   }
 
   // ---------- TUNING / RESULT VIEW ----------
@@ -763,9 +774,7 @@ window.authFunctions = {
       document.getElementById('status').textContent = 'Sinal encontrado';
       setTimeout(function(){ renderResult(team, alreadyRegistered); }, reducedMotion ? 200 : 650);
     }
-
     if (reducedMotion){ finish(); return; }
-
     var ticks = 0, maxTicks = 14;
     var iv = setInterval(function(){
       ticks++;
@@ -789,9 +798,190 @@ window.authFunctions = {
       dividerHtml(t.color) +
       '<p class="verse">"As minhas ovelhas ouvem a minha voz,<br>e eu as conheço, e elas me seguem."</p>' +
       '<p class="verse-ref">João 10:27</p>' +
-      '<button class="again-btn" id="backBtn">Inscrever outra pessoa</button>';
+      '<button class="again-btn" id="backBtn">Inscrever outra pessoa</button>' +
+      '<button class="secondary-btn" id="sugBtn" style="margin-top:10px;">Sugerir nome do congresso</button>';
 
     document.getElementById('backBtn').addEventListener('click', function(){ renderForm(); });
+    document.getElementById('sugBtn').addEventListener('click', function(){ renderSuggestionSearch(); });
+  }
+
+  // ============================================================
+  // NOVA FUNCIONALIDADE: SUGESTÃO DE NOME DO CONGRESSO
+  // ============================================================
+
+  function renderSuggestionSearch(errorMsg){
+    suggestionState.foundPerson = null;
+    suggestionState.foundDocId = null;
+
+    card.innerHTML =
+      dividerHtml() +
+      '<p class="eyebrow">Dinâmica extra</p>' +
+      '<h1 class="headline"><span class="l1" style="font-size:30px;">Nome do</span><span class="l2" style="font-size:30px;">Congresso</span></h1>' +
+      dividerHtml() +
+      '<p class="sub">Digite seu nome para localizar sua inscrição. Se for escolhido, sua equipe ganha pontos e você leva uma premiação.</p>' +
+      '<div style="height:18px"></div>' +
+      (errorMsg ? '<p class="error-msg">' + errorMsg + '</p>' : '') +
+      '<div class="field">' +
+        '<label for="sugSearchName">Nome completo</label>' +
+        '<input id="sugSearchName" type="text" placeholder="Como você se inscreveu" autocomplete="name">' +
+      '</div>' +
+      '<button class="submit-btn" id="sugSearchBtn">Localizar inscrição</button>' +
+      '<button class="again-btn" id="sugBackBtn" style="margin-top:10px;">Voltar ao início</button>';
+
+    document.getElementById('sugSearchBtn').addEventListener('click', handleSuggestionSearch);
+    document.getElementById('sugBackBtn').addEventListener('click', function(){ renderForm(); });
+    document.getElementById('sugSearchName').addEventListener('keydown', function(e){
+      if (e.key === 'Enter') handleSuggestionSearch();
+    });
+    document.getElementById('sugSearchName').focus();
+  }
+
+  async function handleSuggestionSearch(){
+    var rawName = document.getElementById('sugSearchName').value.trim();
+    if (rawName.length < 3){
+      renderSuggestionSearch("Digite pelo menos 3 letras do seu nome.");
+      return;
+    }
+    var btn = document.getElementById('sugSearchBtn');
+    btn.disabled = true;
+    btn.textContent = 'Buscando...';
+
+    try {
+      // Busca todos os inscritos e filtra por similaridade de nome
+      // (Firestore não suporta where com case-insensitive + acentos de forma simples)
+      const snapshot = await getDocs(collection(db, 'inscritos'));
+      var matches = [];
+      var searchSlug = slugify(rawName);
+      snapshot.forEach(function(docSnap){
+        var data = docSnap.data();
+        var docSlug = slugify(data.name || '');
+        // match se o slug do nome contém o slug da busca ou vice-versa
+        if (docSlug.indexOf(searchSlug) !== -1 || searchSlug.indexOf(docSlug) !== -1) {
+          matches.push({ id: docSnap.id, data: data });
+        }
+      });
+
+      if (matches.length === 0){
+        renderSuggestionSearch("Nenhuma inscrição encontrada com esse nome. Verifique a grafia.");
+        return;
+      }
+      if (matches.length > 1){
+        renderSuggestionSearch("Encontramos mais de uma inscrição parecida. Tente seu nome completo.");
+        return;
+      }
+
+      var match = matches[0];
+      suggestionState.foundPerson = match.data;
+      suggestionState.foundDocId = match.id;
+      renderSuggestionForm();
+
+    } catch (e) {
+      console.error(e);
+      renderSuggestionSearch("Erro ao buscar inscrição. Tente novamente.");
+    }
+  }
+
+  function renderSuggestionForm(errorMsg, successMsg){
+    var p = suggestionState.foundPerson;
+    if (!p) { renderSuggestionSearch(); return; }
+    var t = TEAMS[p.team] || { label: p.team || '—', color: '#6B675E' };
+
+    card.innerHTML =
+      dividerHtml(t.color) +
+      '<p class="eyebrow">Inscrição localizada</p>' +
+      '<div style="height:6px"></div>' +
+
+      '<div class="found-card">' +
+        '<div class="found-label">Nome</div>' +
+        '<div class="found-value">' + escapeHtml(p.name) + '</div>' +
+        '<div style="height:12px"></div>' +
+        '<div class="found-label">WhatsApp</div>' +
+        '<div class="found-value">' + escapeHtml(formatWhats(p.whatsapp)) + '</div>' +
+        '<div style="height:12px"></div>' +
+        '<div class="found-label">Equipe</div>' +
+        '<span class="found-team-badge" style="background:' + hexToRgba(t.color,0.15) + ';color:' + t.color + ';">' + escapeHtml(t.label) + ' · ' + escapeHtml(t.freq) + '</span>' +
+      '</div>' +
+
+      (successMsg ? '<p class="error-msg" style="color:var(--teal);">' + successMsg + '</p>' : '') +
+      (errorMsg ? '<p class="error-msg">' + errorMsg + '</p>' : '') +
+
+      '<div class="field">' +
+        '<label for="sugText">Sua sugestão de nome</label>' +
+        '<textarea id="sugText" placeholder="Ex: Congresso Jovem Adoração 2026"></textarea>' +
+      '</div>' +
+      '<button class="submit-btn" id="sugSendBtn">Enviar sugestão</button>' +
+      '<button class="again-btn" id="sugResetBtn" style="margin-top:10px;">Voltar</button>';
+
+    document.getElementById('sugSendBtn').addEventListener('click', handleSendSuggestion);
+    document.getElementById('sugResetBtn').addEventListener('click', function(){ renderSuggestionSearch(); });
+    document.getElementById('sugText').focus();
+  }
+
+  async function handleSendSuggestion(){
+    var text = document.getElementById('sugText').value.trim();
+    if (text.length < 3){
+      renderSuggestionForm("A sugestão precisa ter pelo menos 3 caracteres.");
+      return;
+    }
+    var p = suggestionState.foundPerson;
+    if (!p) { renderSuggestionSearch(); return; }
+
+    var btn = document.getElementById('sugSendBtn');
+    btn.disabled = true;
+    btn.textContent = 'Enviando...';
+
+    try {
+      // Verifica se essa pessoa já enviou sugestão (evita duplicatas)
+      var existing = await getDocs(
+        query(
+          collection(db, 'sugestoes_nomes'),
+          where('inscritoDocId', '==', suggestionState.foundDocId)
+        )
+      );
+      if (!existing.empty){
+        renderSuggestionForm(null, "Você já enviou uma sugestão. Boa sorte!");
+        return;
+      }
+
+      await addDoc(collection(db, 'sugestoes_nomes'), {
+        inscritoDocId: suggestionState.foundDocId,
+        name: p.name,
+        whatsapp: p.whatsapp,
+        team: p.team,
+        sugestao: text,
+        ts: Date.now(),
+        createdAt: serverTimestamp()
+      });
+
+      renderSuggestionSuccess(p.team, text);
+    } catch (e) {
+      console.error(e);
+      renderSuggestionForm("Erro ao enviar. Tente novamente.");
+    }
+  }
+
+  function renderSuggestionSuccess(team, text){
+    var t = TEAMS[team] || { label: team || '—', color: '#6B675E', freq: '' };
+    card.innerHTML =
+      dividerHtml(t.color) +
+      '<p class="eyebrow">Sugestão enviada</p>' +
+      '<div style="height:8px"></div>' +
+      '<p class="result-note">Sua ideia foi registrada com sucesso.</p>' +
+      '<div class="found-card" style="margin-top:14px;">' +
+        '<div class="found-label">Sugestão</div>' +
+        '<div class="found-value" style="font-style:italic;">"' + escapeHtml(text) + '"</div>' +
+        '<div style="height:10px"></div>' +
+        '<div class="found-label">Equipe que será pontuada</div>' +
+        '<span class="found-team-badge" style="background:' + hexToRgba(t.color,0.15) + ';color:' + t.color + ';">' + escapeHtml(t.label) + ' · ' + escapeHtml(t.freq) + '</span>' +
+      '</div>' +
+      dividerHtml(t.color) +
+      '<p class="verse">"Se algum de vocês tem falta de sabedoria,<br>peça-a a Deus, que a todos dá generosamente."</p>' +
+      '<p class="verse-ref">Tiago 1:5</p>' +
+      '<button class="again-btn" id="sugAgainBtn">Enviar outra sugestão</button>' +
+      '<button class="secondary-btn" id="sugHomeBtn" style="margin-top:10px;">Voltar ao início</button>';
+
+    document.getElementById('sugAgainBtn').addEventListener('click', function(){ renderSuggestionSearch(); });
+    document.getElementById('sugHomeBtn').addEventListener('click', function(){ renderForm(); });
   }
 
   // ---------- ADMIN VIEW ----------
@@ -813,6 +1003,7 @@ window.authFunctions = {
       '<div id="peopleListWrap"></div>' +
       '<div class="admin-actions">' +
         '<button id="refreshBtn">Atualizar</button>' +
+        '<button id="sugListBtn">Ver sugestões</button>' +
       '</div>' +
       '<p class="hint">Contagens podem variar em 1 no caso raro de dois escaneamentos simultâneos.</p>' +
       '<p class="hint" style="margin-top:10px;"><a href="#" id="logoutLink" style="color:inherit; text-decoration:underline;">sair</a></p>';
@@ -828,9 +1019,11 @@ window.authFunctions = {
     document.getElementById('refreshBtn').addEventListener('click', function(){
       refreshCounts();
       if (listVisible) loadAndRenderPeople();
+      if (sugListVisible) loadAndRenderSuggestions();
     });
     document.getElementById('listToggleBtn').addEventListener('click', toggleList);
     document.getElementById('csvBtn').addEventListener('click', downloadCsv);
+    document.getElementById('sugListBtn').addEventListener('click', toggleSuggestions);
     document.getElementById('logoutLink').addEventListener('click', function(e){
       e.preventDefault();
       signOut(auth).then(function(){ renderForm(); });
@@ -838,6 +1031,7 @@ window.authFunctions = {
   }
 
   var listVisible = false;
+  var sugListVisible = false;
 
   async function loadPeople(){
     var snapshot = await getDocs(collection(db, "inscritos"));
@@ -847,13 +1041,6 @@ window.authFunctions = {
     });
     people.sort(function(a,b){ return (a.ts||0) - (b.ts||0); });
     return people;
-  }
-
-  function formatWhats(digits){
-    if (!digits) return '';
-    if (digits.length === 11) return '(' + digits.slice(0,2) + ') ' + digits.slice(2,7) + '-' + digits.slice(7);
-    if (digits.length === 10) return '(' + digits.slice(0,2) + ') ' + digits.slice(2,6) + '-' + digits.slice(6);
-    return digits;
   }
 
   async function toggleList(){
@@ -866,6 +1053,7 @@ window.authFunctions = {
       return;
     }
     listVisible = true;
+    sugListVisible = false;
     btn.textContent = 'Ocultar inscritos';
     await loadAndRenderPeople();
   }
@@ -891,10 +1079,51 @@ window.authFunctions = {
     wrap.innerHTML = '<div class="people-list">' + rows + '</div>';
   }
 
-  function escapeHtml(str){
-    var d = document.createElement('div');
-    d.textContent = str;
-    return d.innerHTML;
+  async function toggleSuggestions(){
+    var btn = document.getElementById('sugListBtn');
+    var wrap = document.getElementById('peopleListWrap');
+    if (sugListVisible){
+      sugListVisible = false;
+      btn.textContent = 'Ver sugestões';
+      wrap.innerHTML = '';
+      return;
+    }
+    sugListVisible = true;
+    listVisible = false;
+    btn.textContent = 'Ocultar sugestões';
+    await loadAndRenderSuggestions();
+  }
+
+  async function loadAndRenderSuggestions(){
+    var wrap = document.getElementById('peopleListWrap');
+    wrap.innerHTML = '<div class="people-list"><div class="list-loading">Carregando sugestões...</div></div>';
+    try {
+      var snapshot = await getDocs(collection(db, 'sugestoes_nomes'));
+      var sugs = [];
+      snapshot.forEach(function(docSnap){
+        sugs.push(docSnap.data());
+      });
+      sugs.sort(function(a,b){ return (a.ts||0) - (b.ts||0); });
+
+      if (sugs.length === 0){
+        wrap.innerHTML = '<div class="people-list"><div class="list-empty">Nenhuma sugestão enviada ainda.</div></div>';
+        return;
+      }
+
+      var rows = sugs.map(function(s){
+        var t = TEAMS[s.team] || { label: s.team || '—', color: '#6B675E' };
+        return '<div class="person-row">' +
+          '<div class="person-main">' +
+            '<div class="person-name">' + escapeHtml(s.sugestao || '') + '</div>' +
+            '<div class="person-whats">' + escapeHtml(s.name || '') + ' · ' + escapeHtml(formatWhats(s.whatsapp)) + '</div>' +
+          '</div>' +
+          '<div class="person-team" style="background:' + hexToRgba(t.color, 0.15) + '; color:' + t.color + ';">' + escapeHtml(t.label) + '</div>' +
+        '</div>';
+      }).join('');
+      wrap.innerHTML = '<div class="people-list">' + rows + '</div>';
+    } catch (e) {
+      wrap.innerHTML = '<div class="people-list"><div class="list-empty">Erro ao carregar sugestões.</div></div>';
+    }
   }
 
   function csvSafe(val){
